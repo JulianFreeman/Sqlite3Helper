@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from os import PathLike
 
-
-__version__ = "1.0.0"
-__version_info__ = (1, 0, 0)
+__version__ = "1.1.0"
+__version_info__ = (1, 1, 0)
 
 
 class DataType(StrEnum):
@@ -97,7 +96,6 @@ class Column(object):
 
 @dataclass
 class AbsHeadRow(ABC):
-
     # 这里的几个其实都是 list[str]，但为了防止实例类中提示类型错误，就写成了 list
     primary_keys: list = field(default_factory=list)
     not_nulls: list = field(default_factory=list)
@@ -211,9 +209,14 @@ class Operand(object):
             mark = "NOT IN"
         return Expression(f"{self._name} {mark} ({values})")
 
-    def like(self, regx: str, escape: str = ""):
-        esc_expr = "" if len(escape) == 0 else f" ESCAPE {_to_string(escape)}"
-        return Expression(f"{self._name} LIKE {_to_string(regx)}{esc_expr}")
+    def like(self, regx: str, escape: str = "", not_: bool = False):
+        head = "LIKE"
+        if not_:
+            head = "NOT LIKE"
+        body = f"{head} {_to_string(regx)}"
+        if len(escape) != 0:
+            body = f"{body} ESCAPE {_to_string(escape)}"
+        return Expression(f"{self._name} {body}")
 
     def is_null(self, not_: bool = False):
         mark = "IS NULL"
@@ -338,7 +341,9 @@ class Sqlite3Worker(object):
         return statement
 
     def show_tables(self) -> list[str]:
-        pass
+        cond = Operand("type").equal_to("table").and_(Operand("name").like("sqlite_%", not_=True))
+        _, tables = self.select("sqlite_schema", ["name"], where=cond)
+        return [table[0] for table in tables]
 
     @staticmethod
     def _columns_to_string(columns: list[Column | str]) -> str:
@@ -366,6 +371,9 @@ class Sqlite3Worker(object):
                 column = columns[i]
                 if isinstance(column, Column):
                     type_ = _get_type(column.data_type)
+                    # 支持将 int 隐式转为 float
+                    if type(value[i]) is int and type_ is float:
+                        continue
                     if type(value[i]) is not type_:
                         raise ValueError(f"The {i + 1}(th) type of value must be {type_},"
                                          f" because the column type is {column.data_type}")
@@ -384,7 +392,7 @@ class Sqlite3Worker(object):
 
     @staticmethod
     def _join_where_order_limit(body: str,
-                                where: Expression, order_by: list[str],
+                                where: Expression, order_by: list[str] | str,
                                 limit: int, offset: int) -> str:
         if where is not None:
             body = f"{body} WHERE {where}"
@@ -400,9 +408,9 @@ class Sqlite3Worker(object):
 
     def select(self, table_name: str, columns: list[Column | str], distinct: bool = False,
                where: Expression = None,
-               order_by: list[str] = None,
+               order_by: list[str] | str = None,
                limit: int = None, offset: int = None,
-               *, execute: bool = True) -> tuple[str, list[list]]:
+               *, execute: bool = True) -> tuple[str, list[tuple]]:
         if len(columns) == 0:
             columns_str = "*"
         else:
