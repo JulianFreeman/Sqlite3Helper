@@ -8,7 +8,7 @@ from os import PathLike
 from cryptography.fernet import Fernet
 
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 
@@ -36,11 +36,9 @@ class BlobType(object):
 
 
 def _encrypt_blob(blob: BlobType, fernet: Fernet) -> BlobType:
+    if fernet is None:
+        raise ValueError("Key is not set")
     return BlobType(fernet.encrypt(blob.data))
-
-
-def _decrypt_blob(blob: BlobType, fernet: Fernet) -> BlobType:
-    return BlobType(fernet.decrypt(blob.data))
 
 
 def _get_type(data_type: DataType) -> type:
@@ -419,7 +417,7 @@ class Sqlite3Worker(object):
                 if isinstance(column, Column) and column.secure:
                     for row in rows:
                         # 如果是加密的 BLOB 但是值不为 NULL 才加密
-                        if row[i] is not None:
+                        if row[i] is not None and self._fernet is not None:
                             row[i] = self._fernet.decrypt(row[i])
 
             return statement, rows
