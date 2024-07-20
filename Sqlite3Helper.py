@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from os import PathLike
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 
@@ -225,7 +225,10 @@ class Sqlite3Worker(object):
         self._is_closed = False
         self._fernet = None
         if key is not None:
-            self._fernet = Fernet(key)
+            try:
+                self._fernet = Fernet(key)
+            except ValueError:
+                pass
 
     def __del__(self):
         self.close()
@@ -412,13 +415,18 @@ class Sqlite3Worker(object):
             self._cursor.execute(statement)
             rows = self._cursor.fetchall()
             rows = [list(row) for row in rows]  # 将每行转成列表，方便替换解密数据
-            for i in range(len(columns)):
-                column = columns[i]
-                if isinstance(column, Column) and column.secure:
-                    for row in rows:
-                        # 如果是加密的 BLOB 但是值不为 NULL 才加密
-                        if row[i] is not None and self._fernet is not None:
-                            row[i] = self._fernet.decrypt(row[i])
+            # 下面的整个循环都是为了找到需要解密的数据尝试解密，
+            # 因此一旦有一项解密失败，其他的都不用看了，直接原样返回
+            try:
+                for i in range(len(columns)):
+                    column = columns[i]
+                    if isinstance(column, Column) and column.secure:
+                        for row in rows:
+                            # 如果是加密的 BLOB 但是值不为 NULL 才加密
+                            if row[i] is not None and self._fernet is not None:
+                                row[i] = self._fernet.decrypt(row[i])
+            except InvalidToken:
+                pass
 
             return statement, rows
         else:
