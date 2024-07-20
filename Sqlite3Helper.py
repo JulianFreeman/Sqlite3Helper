@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from os import PathLike
 
-__version__ = "1.1.0"
-__version_info__ = (1, 1, 0)
+
+__version__ = "1.2.0"
+__version_info__ = (1, 2, 0)
 
 
 class DataType(StrEnum):
@@ -175,12 +176,19 @@ class Expression(object):
 class Operand(object):
 
     def __init__(self, column: Column | str):
+        self._column = column
         self._name = column.name if isinstance(column, Column) else column
 
     def equal_to(self, value):
+        if isinstance(self._column, Column):
+            if self._column.data_type == DataType.BLOB and type(value) is str:
+                value = BlobType(value.encode("utf-8"))
         return Expression(f"{self._name} = {_to_string(value)}")
 
     def not_equal_to(self, value):
+        if isinstance(self._column, Column):
+            if self._column.data_type == DataType.BLOB and type(value) is str:
+                value = BlobType(value.encode("utf-8"))
         return Expression(f"{self._name} =! {_to_string(value)}")
 
     def less_than(self, value):
@@ -255,12 +263,17 @@ def order(column: Column | str | int,
 class Sqlite3Worker(object):
 
     def __init__(self, db_name: str | PathLike[str] = ":memory:"):
+        self._db_name = db_name
         self._conn = sqlite3.connect(db_name)
         self._cursor = self._conn.cursor()
         self._is_closed = False
 
     def __del__(self):
         self.close()
+
+    @property
+    def db_name(self) -> str:
+        return self._db_name
 
     def close(self):
         if self._is_closed is False:
@@ -358,7 +371,7 @@ class Sqlite3Worker(object):
         return ", ".join(columns_str_ls)
 
     def insert_into(self, table_name: str, columns: list[Column | str],
-                    values: list[list[str | int | float]],
+                    values: list[list[NullType | str | int | float | BlobType]],
                     *, execute: bool = True, commit: bool = True) -> str:
         col_count = len(columns)
         columns_str = self._columns_to_string(columns)
@@ -374,6 +387,9 @@ class Sqlite3Worker(object):
                     # 支持将 int 隐式转为 float
                     if type(value[i]) is int and type_ is float:
                         continue
+                    # 支持将 NULL 值插入任意类型的列，除了 NOT NULL 限制的
+                    if type(value[i]) is NullType and column.nullable is True:
+                        continue
                     if type(value[i]) is not type_:
                         raise ValueError(f"The {i + 1}(th) type of value must be {type_},"
                                          f" because the column type is {column.data_type}")
@@ -386,8 +402,8 @@ class Sqlite3Worker(object):
         statement = f"{head} {table_name} ({columns_str}) VALUES {values_str};"
         if execute:
             self._cursor.execute(statement)
-        if commit:
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
         return statement
 
     @staticmethod
@@ -440,8 +456,8 @@ class Sqlite3Worker(object):
         statement = f"{body};"
         if execute:
             self._cursor.execute(statement)
-        if commit:
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
         return statement
 
     def update(self, table_name: str, new_values: list[tuple[Column, NullType | int | float | str | BlobType]],
@@ -449,7 +465,10 @@ class Sqlite3Worker(object):
                *, execute: bool = True, commit: bool = True) -> str:
         new_values_str_ls = []
         for column, value in new_values:
-            if _get_data_type(type(value)) != column.data_type:
+            # 支持将 NULL 值填入任意类型的列，除了 NOT NULL 限制的
+            if type(value) is NullType and column.nullable is True:
+                pass
+            elif _get_data_type(type(value)) != column.data_type:
                 raise ValueError(f"Type of {column.name} must be {column.data_type}, found {type(value)}")
             new_values_str_ls.append(f"{column.name} = {_to_string(value)}")
 
@@ -461,6 +480,6 @@ class Sqlite3Worker(object):
         statement = f"{body};"
         if execute:
             self._cursor.execute(statement)
-        if commit:
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
         return statement
