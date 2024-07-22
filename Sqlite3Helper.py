@@ -11,7 +11,7 @@ from os import PathLike
 from cryptography.fernet import Fernet, InvalidToken
 
 
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 
@@ -134,8 +134,11 @@ class Expression(object):
     def and_(self, expression: Expression):
         return Expression(f"{self._expr} AND {expression}")
 
-    def or_(self, expression: Expression):
-        return Expression(f"{self._expr} OR {expression}")
+    def or_(self, expression: Expression, high_priority: bool = False):
+        statement = f"{self._expr} OR {expression}"
+        if high_priority:
+            statement = f"({statement})"
+        return Expression(statement)
 
     def exists(self, not_: bool = False):
         mark = "EXISTS"
