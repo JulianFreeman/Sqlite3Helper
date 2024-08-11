@@ -17,6 +17,10 @@ class BlobTypeTestCase(TestCase):
         self.iv = b'\x1a\xf86\xf0\xfb"\xf2\xab\x83\xccW\xd8=zqY'
         self.b = BlobType(b"hello")
 
+        self.sqh = Sqlite3Worker(key=self.key, fix_time=self.time, fix_iv=self.iv)
+        self.name = Column("name", DataType.TEXT, nullable=False, has_default=True, default="John")
+        self.secure_data = Column("secure_data", DataType.BLOB, secure=True)
+
     def test_encrypt(self):
         _fernet = _NotRandomFernet(self.key, self.time, self.iv)
         _expected = ("X'674141414141426d754f44714776673238507369387175447a46"
@@ -28,6 +32,18 @@ class BlobTypeTestCase(TestCase):
 
     def test_blobtype(self):
         self.assertEqual(str(self.b), "X'68656c6c6f'")
+
+    def test_insert_and_update(self):
+        i1 = self.sqh.insert_into("demo", [self.secure_data], [["Hello"]], execute=False)
+        self.assertEqual(i1, "INSERT INTO demo (secure_data) VALUES (X'674141414141426d754f44714776673238507369387175447a4666595058707857654749353766634a543354734b506f506d722d546d4a74545f317064536134486b516d374b4b2d70754a325556654c39767a6e306c64536235616f6e57524743673d3d');")
+        i2 = self.sqh.insert_into("demo", [self.secure_data], [[None]], execute=False)
+        self.assertEqual(i2, "INSERT INTO demo (secure_data) VALUES (NULL);")
+
+        cond = Operand(self.name).equal_to("John")
+        u1 = self.sqh.update("demo", [(self.secure_data, b"world")], where=cond, execute=False)
+        self.assertEqual(u1, "UPDATE demo SET secure_data = X'674141414141426d754f44714776673238507369387175447a46665950587078575a4935507a5737366b50347948584335346579723853396c794f36724b7a6c7570506c743455386935396258414e6b624f5858722d3051705f723645444c6253413d3d' WHERE name = 'John';")
+        u2 = self.sqh.update("demo", [(self.secure_data, NullType())], where=cond, execute=False)
+        self.assertEqual(u2, "UPDATE demo SET secure_data = NULL WHERE name = 'John';")
 
 
 class ColumnTestCase(TestCase):
@@ -48,7 +64,7 @@ class ColumnTestCase(TestCase):
 class CRUDTestCase(TestCase):
 
     def setUp(self):
-        self.sqh = Sqlite3Worker(r"F:\GitHubRepo\Sqlite3Helper\test\test.db")
+        self.sqh = Sqlite3Worker()
         self.name = Column("name", DataType.TEXT, nullable=False, has_default=True, default="John")
         self.age = Column("age", DataType.INTEGER)
         self.salary = Column("salary", DataType.REAL)
