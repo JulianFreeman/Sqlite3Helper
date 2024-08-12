@@ -4,7 +4,7 @@ from unittest import TestCase
 from Sqlite3Helper import (
     _to_string, Column, DataType,
     NullType, BlobType, _NotRandomFernet,
-    Sqlite3Worker, Operand,
+    Sqlite3Worker, Operand, Expression,
 
 )
 
@@ -35,13 +35,17 @@ class BlobTypeTestCase(TestCase):
 
     def test_insert_and_update(self):
         i1 = self.sqh.insert_into("demo", [self.secure_data], [["Hello"]], execute=False)
-        self.assertEqual(i1, "INSERT INTO demo (secure_data) VALUES (X'674141414141426d754f44714776673238507369387175447a4666595058707857654749353766634a543354734b506f506d722d546d4a74545f317064536134486b516d374b4b2d70754a325556654c39767a6e306c64536235616f6e57524743673d3d');")
+        self.assertEqual(i1, "INSERT INTO demo (secure_data) VALUES (X'674141414141426d754f447147766732385073693"
+                             "87175447a4666595058707857654749353766634a543354734b506f506d722d546d4a74545f3170645"
+                             "36134486b516d374b4b2d70754a325556654c39767a6e306c64536235616f6e57524743673d3d');")
         i2 = self.sqh.insert_into("demo", [self.secure_data], [[None]], execute=False)
         self.assertEqual(i2, "INSERT INTO demo (secure_data) VALUES (NULL);")
 
         cond = Operand(self.name).equal_to("John")
         u1 = self.sqh.update("demo", [(self.secure_data, b"world")], where=cond, execute=False)
-        self.assertEqual(u1, "UPDATE demo SET secure_data = X'674141414141426d754f44714776673238507369387175447a46665950587078575a4935507a5737366b50347948584335346579723853396c794f36724b7a6c7570506c743455386935396258414e6b624f5858722d3051705f723645444c6253413d3d' WHERE name = 'John';")
+        self.assertEqual(u1, "UPDATE demo SET secure_data = X'674141414141426d754f44714776673238507369387175447a4"
+                             "6665950587078575a4935507a5737366b50347948584335346579723853396c794f36724b7a6c757050"
+                             "6c743455386935396258414e6b624f5858722d3051705f723645444c6253413d3d' WHERE name = 'John';")
         u2 = self.sqh.update("demo", [(self.secure_data, NullType())], where=cond, execute=False)
         self.assertEqual(u2, "UPDATE demo SET secure_data = NULL WHERE name = 'John';")
 
@@ -76,7 +80,8 @@ class CRUDTestCase(TestCase):
         c1 = self.sqh.create_table("demo", [
             self.name, self.age, self.salary, self.data, self.secure_data, self.null_value
         ], if_not_exists=True, execute=False)
-        self.assertEqual(c1, "CREATE TABLE IF NOT EXISTS demo (name TEXT NOT NULL DEFAULT 'John', age INTEGER, salary REAL, data BLOB, secure_data BLOB, null_value NULL);")
+        self.assertEqual(c1, "CREATE TABLE IF NOT EXISTS demo (name TEXT NOT NULL DEFAULT 'John', age INTEGER, "
+                             "salary REAL, data BLOB, secure_data BLOB, null_value NULL);")
 
     def test_insert(self):
         i1 = self.sqh.insert_into("demo", [self.null_value], [[None]], execute=False)
@@ -136,6 +141,34 @@ class CRUDTestCase(TestCase):
         self.assertRaises(ValueError, self.sqh.update, "demo", [(self.name, None)], where=cond, execute=False)
 
 
+class OperandTestCase(TestCase):
+
+    def setUp(self):
+        self.key = b'a5ohpollt_86HP8zgL3v4ad7pBFvDEW7gWWJqWIBkX8='
+        self.time = 1723392234
+        self.iv = b'\x1a\xf86\xf0\xfb"\xf2\xab\x83\xccW\xd8=zqY'
+        self.b = BlobType(b"hello")
+
+    def test_simple(self):
+        col_name = Column("name", DataType.TEXT)
+        o1 = Operand(col_name).less_than(10)
+        self.assertEqual(str(o1), "name < 10")
+        o2 = Operand(col_name).equal_to("John")
+        self.assertEqual(str(o2), "name = 'John'")
+
+        col_data = Column("data", DataType.BLOB, secure=True)
+        o3 = Operand(col_data, self.key, self.time, self.iv).equal_to("John")
+        self.assertEqual(str(o3), "data = X'674141414141426d754f44714776673238507369387175447a"
+                                  "46665950587078575a32565554713964714837763350576862577667395369796d3"
+                                  "85a3869766455636f456473357a56435855566c724a776e66415842696564374443"
+                                  "7746594832673d3d'")
+        o4 = Operand(col_data).equal_to("John")
+        self.assertEqual(str(o4), "data = X'4a6f686e'")
+
+        o5 = Operand(col_data).in_(["John", 10, self.b])
+        self.assertEqual(str(o5), "data IN (X'4a6f686e', 10, X'68656c6c6f')")
+
+
 class TestMain(TestCase):
 
     def test_datatype_output(self):
@@ -158,6 +191,20 @@ class TestMain(TestCase):
         self.assertEqual(_to_string(BlobType(b"hello")), "X'68656c6c6f'")
         self.assertEqual(_to_string(1), "1")
         self.assertEqual(_to_string(1.0), "1.0")
+
+    def test_expression(self):
+        e1 = Expression("A")
+        e2 = Expression("B")
+        p1 = e1.and_(e2)
+        self.assertEqual(str(p1), "A AND B")
+        p2 = e1.or_(e2)
+        self.assertEqual(str(p2), "A OR B")
+        p3 = e1.or_(e2, high_priority=True)
+        self.assertEqual(str(p3), "(A OR B)")
+        p4 = e1.exists()
+        self.assertEqual(str(p4), "EXISTS (A)")
+        p5 = e1.exists(not_=True)
+        self.assertEqual(str(p5), "NOT EXISTS (A)")
 
 
 if __name__ == '__main__':
