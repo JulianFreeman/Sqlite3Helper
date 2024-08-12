@@ -12,8 +12,11 @@ from types import NoneType
 from cryptography.fernet import Fernet, InvalidToken
 
 
-__version__ = "2.2.2"
+__version__ = "2.2.3"
 __version_info__ = tuple(map(int, __version__.split(".")))
+
+__all__ = ["Sqlite3Worker", "Column", "DataType", "NullType", "BlobType",
+           "Operand", "Expression", "SortOption", "NullOption", "order"]
 
 
 class DataType(StrEnum):
@@ -56,54 +59,38 @@ class _NotRandomFernet(Fernet):
         return self._encrypt_from_parts(data, self._fix_time, self._fix_iv)
 
 
-VALUE_TYPES = None | NullType | int | float | str | bytes | BlobType
+GeneralValueTypes = None | NullType | int | float | str | bytes | BlobType
+SpecialValueTypes = NullType | int | float | str | BlobType
 
 
-def _check_data_type(data_type: DataType, allow_null: bool, value) -> bool:
-    value_type = type(value)
-    allow_types = []
-    if data_type == DataType.NULL:
-        pass
-    elif data_type == DataType.INTEGER:
-        allow_types.extend([int, ])
-    elif data_type == DataType.REAL:
-        allow_types.extend([int, float])
-    elif data_type == DataType.TEXT:
-        allow_types.extend([str, ])
-    elif data_type == DataType.BLOB:
-        allow_types.extend([str, bytes, BlobType])
-
-    if allow_null:
-        allow_types.extend([NoneType, NullType])
-
-    return value_type in allow_types
-
-
-def _implicitly_convert(data_type: DataType, value):
-    if data_type == DataType.REAL and type(value) is int:
+def _implicitly_convert(data_type: DataType, value: GeneralValueTypes) -> SpecialValueTypes:
+    if data_type == DataType.NULL and value is None:
+        return NullType()
+    if data_type == DataType.REAL and isinstance(value, int):
         return float(value)
     if data_type == DataType.BLOB:
-        if type(value) is str:
+        if isinstance(value, str):
             return BlobType(value.encode("utf-8"))
-        if type(value) is bytes:
+        if isinstance(value, bytes):
             return BlobType(value)
 
     return value
 
 
-def _is_null(value) -> bool:
-    return type(value) in (NoneType, NullType)
-
-
-def _to_string(value):
+def _to_string(value: GeneralValueTypes):
+    # 有的时候用此函数之前没有隐式转换，
+    # 因此还是要判断一下 None
     if value is None:
         value = NullType()
-    elif type(value) is str:
+    elif isinstance(value, str):
         # 只要开头或者结尾任意一个字符不是单引号
         if not (value.startswith("'") and value.endswith("'")):
             # 把单引号换为两个单引号转义
             value = value.replace("'", "''")
             value = f"'{value}'"
+    elif isinstance(value, bytes):
+        value = BlobType(value)
+
     return str(value)
 
 
@@ -115,7 +102,7 @@ class Column(object):
     nullable: bool = True
     unique: bool = False
     has_default: bool = False
-    default: NullType | int | float | str | BlobType = 0
+    default: GeneralValueTypes = 0
 
     secure: bool = False
 
@@ -177,46 +164,50 @@ class Operand(object):
         self._fix_iv = fix_iv
         self._name = column.name if isinstance(column, Column) else column
 
-    def equal_to(self, value, not_: bool = False):
+    def _try_encrypt(self, value: GeneralValueTypes) -> GeneralValueTypes:
         if isinstance(self._column, Column):
-            if self._column.data_type == DataType.BLOB and type(value) is str:
-                value = BlobType(value.encode("utf-8"))
-            # 这里不能换成 elif
+            # 这里主要为了转换 BlobType
+            value = _implicitly_convert(self._column.data_type, value)
             if self._key is not None and self._column.secure and isinstance(value, BlobType):
                 fix_time = self._fix_time if self._fix_time is not None else int(time.time())
                 fix_iv = self._fix_iv if self._fix_iv is not None else os.urandom(16)
-                try:
-                    value = value.encrypt(_NotRandomFernet(self._key, fix_time, fix_iv))
-                except ValueError:
-                    pass
+                value = value.encrypt(_NotRandomFernet(self._key, fix_time, fix_iv))
+
+        return value
+
+    def equal_to(self, value: GeneralValueTypes, not_: bool = False):
+        value = self._try_encrypt(value)
         op = "!=" if not_ else "="
         return Expression(f"{self._name} {op} {_to_string(value)}")
 
-    def less_than(self, value):
+    # 上面的相等比较可能会用在字符串或者二进制数据上，所以进行隐式转换并尝试加密
+    # 对于不等比较一般只用于数字，差别不大，所以不进行隐式转换
+
+    def less_than(self, value: GeneralValueTypes):
         return Expression(f"{self._name} < {_to_string(value)}")
 
-    def greater_than(self, value):
+    def greater_than(self, value: GeneralValueTypes):
         return Expression(f"{self._name} > {_to_string(value)}")
 
-    def less_equal(self, value):
+    def less_equal(self, value: GeneralValueTypes):
         return Expression(f"{self._name} <= {_to_string(value)}")
 
-    def greater_equal(self, value):
+    def greater_equal(self, value: GeneralValueTypes):
         return Expression(f"{self._name} >= {_to_string(value)}")
 
-    def between(self, minimum, maximum, not_: bool = False):
+    def between(self, minimum: GeneralValueTypes, maximum: GeneralValueTypes, not_: bool = False):
         mark = "BETWEEN"
         if not_:
             mark = "NOT BETWEEN"
         return Expression(f"{self._name} {mark} {_to_string(minimum)} AND {_to_string(maximum)}")
 
-    def in_(self, values: list | str, not_: bool = False):
-        if isinstance(values, list):
-            values = ", ".join([_to_string(value) for value in values])
+    def in_(self, values: list[GeneralValueTypes], not_: bool = False):
+        # in 也算是相等比较的一种，所以也给隐私转换并尝试加密了
+        values_str = ", ".join([_to_string(self._try_encrypt(value)) for value in values])
         mark = "IN"
         if not_:
             mark = "NOT IN"
-        return Expression(f"{self._name} {mark} ({values})")
+        return Expression(f"{self._name} {mark} ({values_str})")
 
     def like(self, regx: str, escape: str = "", not_: bool = False):
         head = "LIKE"
@@ -249,15 +240,18 @@ class NullOption(StrEnum):
     NULLS_LAST = "NULLS LAST"
 
 
-def order(column: Column | str | int,
-          sort_option: SortOption = SortOption.NONE,
-          null_option: NullOption = NullOption.NONE) -> str:
+def order(
+        column: Column | str | int,
+        sort_option: SortOption = SortOption.NONE,
+        null_option: NullOption = NullOption.NONE
+) -> str:
     name = column.name if isinstance(column, Column) else str(column)
     if sort_option != SortOption.NONE:
         name = f"{name} {sort_option.value}"
     if sqlite3.sqlite_version_info >= (3, 30, 0):
         if null_option != NullOption.NONE:
             name = f"{name} {null_option.value}"
+
     return name
 
 
@@ -304,6 +298,37 @@ class Sqlite3Worker(object):
             self._cursor.execute(statement)
         except sqlite3.Error as e:
             raise sqlite3.Error(f"Error name: {e.sqlite_errorname};\nError statement: {statement}")
+
+    @staticmethod
+    def _check_data_type(data_type: DataType, allow_null: bool, value: GeneralValueTypes) -> bool:
+        allow_types = []
+        if data_type == DataType.NULL:
+            pass
+        elif data_type == DataType.INTEGER:
+            allow_types.extend([int, ])
+        elif data_type == DataType.REAL:
+            allow_types.extend([int, float])
+        elif data_type == DataType.TEXT:
+            allow_types.extend([str, ])
+        elif data_type == DataType.BLOB:
+            allow_types.extend([str, bytes, BlobType])
+
+        if allow_null:
+            allow_types.extend([NoneType, NullType])
+
+        return isinstance(value, tuple(allow_types))
+
+    @staticmethod
+    def _is_null(value: GeneralValueTypes) -> bool:
+        return isinstance(value, (NoneType, NullType))
+
+    def _try_encrypt(self, column: Column, value: GeneralValueTypes) -> GeneralValueTypes:
+        # 如果有 secure，则这里的类型要么是 BlobType，要么是 NULL
+        # 尽管判断不是 NULL 也可以，但是为了更严谨些，还是判断 BlobType 吧
+        if column.secure and isinstance(value, BlobType):
+            value = value.encrypt(self._fernet)
+
+        return value
 
     def create_table(self, table_name: str, columns: list[Column],
                      if_not_exists: bool = False, schema_name: str = "",
@@ -353,7 +378,7 @@ class Sqlite3Worker(object):
         if not column.nullable:
             if not column.has_default:
                 raise ValueError("If the new column is not null, it must have default value")
-            if column.default is NullType:
+            if self._is_null(column.default):
                 raise ValueError("If the new column is not null, its default value must not be NULL")
 
         head = "ALTER TABLE"
@@ -391,7 +416,7 @@ class Sqlite3Worker(object):
         return ", ".join(columns_str_ls)
 
     def insert_into(self, table_name: str, columns: list[Column | str],
-                    values: list[list[VALUE_TYPES]],
+                    values: list[list[GeneralValueTypes]],
                     *, execute: bool = True, commit: bool = True) -> str:
         col_count = len(columns)
         columns_str = self._columns_to_string(columns)
@@ -404,13 +429,9 @@ class Sqlite3Worker(object):
             value_row_str_ls = []
             for column, value in zip(columns, value_row):
                 if isinstance(column, Column):
-                    if not _check_data_type(column.data_type, column.nullable, value):
+                    if not self._check_data_type(column.data_type, column.nullable, value):
                         raise ValueError(f"Type of {column.name} must be {column.data_type}, found {type(value)}")
-                    # 这一步一定在加密之前
-                    value = _implicitly_convert(column.data_type, value)
-                    # 如果加密
-                    if column.secure and not _is_null(value):
-                        value = value.encrypt(self._fernet)
+                    value = self._try_encrypt(column, _implicitly_convert(column.data_type, value))
 
                 value_row_str_ls.append(_to_string(value))
 
@@ -496,19 +517,15 @@ class Sqlite3Worker(object):
                 self._conn.commit()
         return statement
 
-    def update(self, table_name: str, new_values: list[tuple[Column | str, VALUE_TYPES]],
+    def update(self, table_name: str, new_values: list[tuple[Column | str, GeneralValueTypes]],
                where: Expression = None,
                *, execute: bool = True, commit: bool = True) -> str:
         new_values_str_ls = []
         for column, value in new_values:
             if isinstance(column, Column):
-                if not _check_data_type(column.data_type, column.nullable, value):
+                if not self._check_data_type(column.data_type, column.nullable, value):
                     raise ValueError(f"Type of {column.name} must be {column.data_type}, found {type(value)}")
-                # 这一步一定在加密之前
-                value = _implicitly_convert(column.data_type, value)
-                # 如果加密
-                if column.secure and not _is_null(value):
-                    value = value.encrypt(self._fernet)
+                value = self._try_encrypt(column, _implicitly_convert(column.data_type, value))
 
                 name = column.name
             else:
