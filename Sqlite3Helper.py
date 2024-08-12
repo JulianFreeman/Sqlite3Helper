@@ -12,11 +12,19 @@ from types import NoneType
 from cryptography.fernet import Fernet, InvalidToken
 
 
-__version__ = "2.2.3"
+__version__ = "2.2.4"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 __all__ = ["Sqlite3Worker", "Column", "DataType", "NullType", "BlobType",
-           "Operand", "Expression", "SortOption", "NullOption", "order"]
+           "Operand", "Expression", "SortOption", "NullOption", "order",
+           "generate_key_and_stuff"]
+
+
+def generate_key_and_stuff():
+    key = Fernet.generate_key()
+    fix_time = int(time.time())
+    fix_iv = os.urandom(16)
+    return key, fix_time, fix_iv
 
 
 class DataType(StrEnum):
