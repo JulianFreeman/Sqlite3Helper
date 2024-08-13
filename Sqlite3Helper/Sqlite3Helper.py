@@ -12,14 +12,6 @@ from types import NoneType
 from cryptography.fernet import Fernet, InvalidToken
 
 
-__version__ = "2.2.4"
-__version_info__ = tuple(map(int, __version__.split(".")))
-
-__all__ = ["Sqlite3Worker", "Column", "DataType", "NullType", "BlobType",
-           "Operand", "Expression", "SortOption", "NullOption", "order",
-           "generate_key_and_stuff"]
-
-
 def generate_key_and_stuff():
     key = Fernet.generate_key()
     fix_time = int(time.time())

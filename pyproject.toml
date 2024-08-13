@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["version"]
+
+name = "Sqlite3Helper"
+description = "一个不安全的 sqlite3 包装库"
+authors = [
+    {name = "Julian Freeman", email = "freemanjulian372@gmail.com"}
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+
+
+dependencies = [
+    "cryptography"
+]
+requires-python = ">=3.10"
+
+[tool.setuptools.dynamic]
+version = {attr = "Sqlite3Helper.__version__"}

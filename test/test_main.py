@@ -2,11 +2,11 @@
 import unittest
 from unittest import TestCase
 from Sqlite3Helper import (
-    _to_string, Column, DataType,
-    NullType, BlobType, _NotRandomFernet,
+    Column, DataType,
+    NullType, BlobType,
     Sqlite3Worker, Operand, Expression,
-
 )
+from Sqlite3Helper.Sqlite3Helper import _to_string, _NotRandomFernet
 
 
 class BlobTypeTestCase(TestCase):
