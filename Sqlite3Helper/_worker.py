@@ -14,7 +14,7 @@ from ._types_def import (
     NullType, BlobType,
 )
 from ._util_func import to_string, implicitly_convert
-from ._column import Column
+from ._column import Column, Table
 from ._where import Operand, Expression
 
 
@@ -59,8 +59,8 @@ class Sqlite3Worker(object):
     def _execute(self, statement: str):
         try:
             self._cursor.execute(statement)
-        except sqlite3.Error as e:
-            raise sqlite3.Error(f"Error name: {e.sqlite_errorname};\nError statement: {statement}")
+        except sqlite3.Error:
+            raise sqlite3.Error(f"Error statement: {statement}")
 
     @staticmethod
     def _check_data_type(data_type: DataType, allow_null: bool, value: GeneralValueTypes) -> bool:
@@ -93,9 +93,15 @@ class Sqlite3Worker(object):
 
         return value
 
-    def create_table(self, table_name: str, columns: list[Column],
+    @staticmethod
+    def _get_table_name(table: Table | str) -> str:
+        return table.table if isinstance(table, Table) else table
+
+    def create_table(self, table: Table | str, columns: list[Column],
                      if_not_exists: bool = False, schema_name: str = "",
                      *, execute: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         if table_name.startswith("sqlite_"):
             raise ValueError("Table name must not start with 'sqlite_')")
 
@@ -113,8 +119,10 @@ class Sqlite3Worker(object):
             self._execute(statement)
         return statement
 
-    def drop_table(self, table_name: str, if_exists: bool = False,
+    def drop_table(self, table: Table | str, if_exists: bool = False,
                    schema_name: str = "", *, execute: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         head = "DROP TABLE"
         if if_exists:
             head = f"{head} IF EXISTS"
@@ -128,14 +136,18 @@ class Sqlite3Worker(object):
             self._execute(statement)
         return statement
 
-    def rename_table(self, table_name: str, new_name: str, *, execute: bool = True) -> str:
+    def rename_table(self, table: Table | str, new_name: str, *, execute: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         head = "ALTER TABLE"
         statement = f"{head} {table_name} RENAME TO {new_name};"
         if execute:
             self._execute(statement)
         return statement
 
-    def add_column(self, table_name: str, column: Column, *, execute: bool = True) -> str:
+    def add_column(self, table: Table | str, column: Column, *, execute: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         if column.primary_key or column.unique:
             raise ValueError("The new column cannot have primary key or unique")
         if not column.nullable:
@@ -150,10 +162,11 @@ class Sqlite3Worker(object):
             self._execute(statement)
         return statement
 
-    def rename_column(self, table_name: str, column_name: str,
+    def rename_column(self, table: Table | str, column_name: str,
                       new_name: str, *, execute: bool = True) -> str:
         if sqlite3.sqlite_version_info < (3, 25, 0):
             raise ValueError("SQLite under 3.25.0 does not support rename column")
+        table_name = self._get_table_name(table)
 
         head = "ALTER TABLE"
         statement = f"{head} {table_name} RENAME COLUMN {column_name} TO {new_name};"
@@ -178,9 +191,11 @@ class Sqlite3Worker(object):
                 raise ValueError(f"Column must be str or Column object, found {type(column)}")
         return ", ".join(columns_str_ls)
 
-    def insert_into(self, table_name: str, columns: list[Column | str],
+    def insert_into(self, table: Table | str, columns: list[Column | str],
                     values: list[list[GeneralValueTypes]],
                     *, execute: bool = True, commit: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         col_count = len(columns)
         columns_str = self._columns_to_string(columns)
 
@@ -226,11 +241,13 @@ class Sqlite3Worker(object):
                 body = f"{body} OFFSET {offset}"
         return body
 
-    def select(self, table_name: str, columns: list[Column | str], distinct: bool = False,
+    def select(self, from_: Table | str, columns: list[Column | str], distinct: bool = False,
                where: Expression = None,
                order_by: list[str] | str = None,
                limit: int = None, offset: int = None,
                *, execute: bool = True) -> tuple[str, list[list]]:
+        from_clause = self._get_table_name(from_)
+
         if len(columns) == 0:
             columns_str = "*"
         else:
@@ -239,7 +256,7 @@ class Sqlite3Worker(object):
         head = "SELECT"
         if distinct:
             head = f"{head} DISTINCT"
-        body = f"{head} {columns_str} FROM {table_name}"
+        body = f"{head} {columns_str} FROM {from_clause}"
         body = self._join_where_order_limit(body, where, order_by, limit, offset)
 
         statement = f"{body};"
@@ -266,8 +283,10 @@ class Sqlite3Worker(object):
         else:
             return statement, []
 
-    def delete_from(self, table_name: str, where: Expression = None,
+    def delete_from(self, table: Table | str, where: Expression = None,
                     *, execute: bool = True, commit: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         head = "DELETE FROM"
         body = f"{head} {table_name}"
         if where is not None:
@@ -280,9 +299,11 @@ class Sqlite3Worker(object):
                 self._conn.commit()
         return statement
 
-    def update(self, table_name: str, new_values: list[tuple[Column | str, GeneralValueTypes]],
+    def update(self, table: Table | str, new_values: list[tuple[Column | str, GeneralValueTypes]],
                where: Expression = None,
                *, execute: bool = True, commit: bool = True) -> str:
+        table_name = self._get_table_name(table)
+
         new_values_str_ls = []
         for column, value in new_values:
             if isinstance(column, Column):
