@@ -8,6 +8,20 @@
 
 说这个库不安全，是因为这个库没有处理 SQL 注入攻击的问题。本来也就是自己用一用，注入攻击这么复杂的问题，还是先放一放吧。
 
+## 安装
+
+安装预构建的 `.whl` 包：
+
+```sh
+pip install https://github.com/JulianFreeman/Sqlite3Helper/releases/download/v2.2.4/Sqlite3Helper-2.2.4-py3-none-any.whl
+```
+
+从源码安装：
+
+```sh
+pip install https://github.com/JulianFreeman/Sqlite3Helper.git@v2.2.4
+```
+
 ## 示例
 
 点击 [这里](docs/basic_usage.md) 查看基本使用。

@@ -6,7 +6,8 @@ from Sqlite3Helper import (
     NullType, BlobType,
     Sqlite3Worker, Operand, Expression,
 )
-from Sqlite3Helper.Sqlite3Helper import _to_string, _NotRandomFernet
+from Sqlite3Helper._util_func import to_string
+from Sqlite3Helper._crypto import NotRandomFernet
 
 
 class BlobTypeTestCase(TestCase):
@@ -22,7 +23,7 @@ class BlobTypeTestCase(TestCase):
         self.secure_data = Column("secure_data", DataType.BLOB, secure=True)
 
     def test_encrypt(self):
-        _fernet = _NotRandomFernet(self.key, self.time, self.iv)
+        _fernet = NotRandomFernet(self.key, self.time, self.iv)
         _expected = ("X'674141414141426d754f44714776673238507369387175447a46"
                      "665950587078575a2d75466d5139736f42485f5f516d3562306354"
                      "494f3144446d723648526c656a7335416c6957334a324b4f647230"
@@ -179,18 +180,18 @@ class TestMain(TestCase):
         self.assertEqual(DataType.BLOB.value, "BLOB")
 
     def test_to_string(self):
-        self.assertEqual(_to_string("Hello"), "'Hello'")
-        self.assertEqual(_to_string("'Hello'"), "'Hello'")
-        self.assertEqual(_to_string("'Hello"), "'''Hello'")
-        self.assertEqual(_to_string("Hello'"), "'Hello'''")
-        self.assertEqual(_to_string("He'llo"), "'He''llo'")
-        self.assertEqual(_to_string("He'll'o"), "'He''ll''o'")
+        self.assertEqual(to_string("Hello"), "'Hello'")
+        self.assertEqual(to_string("'Hello'"), "'Hello'")
+        self.assertEqual(to_string("'Hello"), "'''Hello'")
+        self.assertEqual(to_string("Hello'"), "'Hello'''")
+        self.assertEqual(to_string("He'llo"), "'He''llo'")
+        self.assertEqual(to_string("He'll'o"), "'He''ll''o'")
 
-        self.assertEqual(_to_string(None), "NULL")
-        self.assertEqual(_to_string(NullType()), "NULL")
-        self.assertEqual(_to_string(BlobType(b"hello")), "X'68656c6c6f'")
-        self.assertEqual(_to_string(1), "1")
-        self.assertEqual(_to_string(1.0), "1.0")
+        self.assertEqual(to_string(None), "NULL")
+        self.assertEqual(to_string(NullType()), "NULL")
+        self.assertEqual(to_string(BlobType(b"hello")), "X'68656c6c6f'")
+        self.assertEqual(to_string(1), "1")
+        self.assertEqual(to_string(1.0), "1.0")
 
     def test_expression(self):
         e1 = Expression("A")
