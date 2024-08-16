@@ -6,7 +6,11 @@ import sqlite3
 import time
 from os import PathLike
 from types import NoneType
-from cryptography.fernet import InvalidToken
+try:
+    from cryptography.fernet import InvalidToken
+except ImportError:
+    class InvalidToken(Exception):
+        pass
 
 from ._crypto import NotRandomFernet
 from ._types_def import (
@@ -259,7 +263,7 @@ class Sqlite3Worker(object):
                             # 因此这里还是得继续循环下去
                             try:
                                 row[i] = self._fernet.decrypt(row[i])
-                            except InvalidToken:
+                            except (InvalidToken, AttributeError):
                                 pass
 
             return statement, rows

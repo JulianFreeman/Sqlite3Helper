@@ -13,11 +13,13 @@ authors = [
 readme = "README.md"
 license = {file = "LICENSE"}
 
+dependencies = []
+requires-python = ">=3.10"
 
-dependencies = [
+[project.optional-dependencies]
+crypto = [
     "cryptography"
 ]
-requires-python = ">=3.10"
 
 [tool.setuptools.dynamic]
 version = {attr = "Sqlite3Helper.__version__"}

@@ -10,7 +10,7 @@ from ._where import (
 from ._worker import Sqlite3Worker
 
 
-__version__ = "2.2.5"
+__version__ = "2.2.6"
 __version_info__ = tuple(map(int, __version__.split(".")))
 
 __all__ = ["Sqlite3Worker", "Column", "DataType", "NullType", "BlobType",

@@ -1,11 +1,21 @@
 # coding: utf8
 import os
 import time
-from cryptography.fernet import Fernet
+
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    class Fernet(object):
+        def __init__(self, key, backend):
+            pass
 
 
 def generate_key_and_stuff():
-    key = Fernet.generate_key()
+    try:
+        key = Fernet.generate_key()
+    except AttributeError:
+        raise ModuleNotFoundError("cryptography is not installed, see readme.")
+
     fix_time = int(time.time())
     fix_iv = os.urandom(16)
     return key, fix_time, fix_iv
@@ -20,4 +30,7 @@ class NotRandomFernet(Fernet):
         self._fix_iv = fix_iv
 
     def encrypt(self, data: bytes) -> bytes:
-        return self._encrypt_from_parts(data, self._fix_time, self._fix_iv)
+        try:
+            return self._encrypt_from_parts(data, self._fix_time, self._fix_iv)
+        except AttributeError:
+            return data
