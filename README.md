@@ -10,36 +10,19 @@
 
 ## 安装
 
-安装预构建的 `.whl` 包：
-
 ```sh
-pip install https://github.com/JulianFreeman/Sqlite3Helper/releases/download/v2.2.6/Sqlite3Helper-2.2.6-py3-none-any.whl
+pip install Sqlite3Helper
 ```
 
-从源码安装：
+### 安装可选的加密功能
+
+> 需 2.2.6 版本以上，2.2.6 版本之前是强制安装的
 
 ```sh
-pip install https://github.com/JulianFreeman/Sqlite3Helper.git@v2.2.6
+pip install Sqlite3Helper[crypto]
 ```
 
-### 安装加密功能
-
-> 需 2.2.6 版本以上
-
-安装预构建的 `.whl` 包：
-
-```sh
-pip install Sqlite3Helper[crypto]@https://github.com/JulianFreeman/Sqlite3Helper/releases/download/v2.2.6/Sqlite3Helper-2.2.6-py3-none-any.whl
-```
-
-从源码安装：
-
-```sh
-pip install Sqlite3Helper[crypto]@https://github.com/JulianFreeman/Sqlite3Helper.git@v2.2.6
-```
 
 ## 示例
 
 点击 [这里](docs/basic_usage.md) 查看基本使用。
-
-点击 [这里](examples/best_practice.py) 查看最佳实践。

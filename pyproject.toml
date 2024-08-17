@@ -11,15 +11,25 @@ authors = [
     {name = "Julian Freeman", email = "freemanjulian372@gmail.com"}
 ]
 readme = "README.md"
-license = {file = "LICENSE"}
 
 dependencies = []
 requires-python = ">=3.10"
+
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
 
 [project.optional-dependencies]
 crypto = [
     "cryptography"
 ]
+
+[project.urls]
+Homepage = "https://github.com/JulianFreeman/Sqlite3Helper"
+Repository = "https://github.com/JulianFreeman/Sqlite3Helper.git"
+Changelog = "https://github.com/JulianFreeman/Sqlite3Helper/blob/main/CHANGELOG.md"
 
 [tool.setuptools.dynamic]
 version = {attr = "Sqlite3Helper.__version__"}
