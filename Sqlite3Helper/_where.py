@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 import sqlite3
-from enum import StrEnum
+from enum import Enum
 from ._crypto import NotRandomFernet
 from ._types_def import (
     GeneralValueTypes, BlobType,
@@ -115,13 +115,13 @@ class Operand(object):
         return Expression(f"{self._name} GLOB {to_string(regx)}")
 
 
-class SortOption(StrEnum):
+class SortOption(Enum):
     NONE = ""
     ASC = "ASC"
     DESC = "DESC"
 
 
-class NullOption(StrEnum):
+class NullOption(Enum):
     NONE = ""
     NULLS_FIRST = "NULLS FIRST"
     NULLS_LAST = "NULLS LAST"

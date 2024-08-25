@@ -1,10 +1,10 @@
 # coding: utf8
 from __future__ import annotations
-from enum import StrEnum
+from enum import Enum
 from ._crypto import NotRandomFernet
 
 
-class DataType(StrEnum):
+class DataType(Enum):
     NULL = "NULL"
     INTEGER = "INTEGER"
     REAL = "REAL"
