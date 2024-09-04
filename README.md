@@ -25,4 +25,4 @@ pip install Sqlite3Helper[crypto]
 
 ## 示例
 
-点击 [这里](docs/basic_usage.md) 查看基本使用。
+点击 [这里](https://github.com/JulianFreeman/Sqlite3Helper/blob/main/docs/basic_usage.md) 查看基本使用。

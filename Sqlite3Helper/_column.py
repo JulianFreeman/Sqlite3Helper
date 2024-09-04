@@ -1,5 +1,6 @@
 # coding: utf8
-from dataclasses import dataclass
+from abc import ABC
+from dataclasses import dataclass, field
 from ._types_def import DataType, GeneralValueTypes
 from ._util_func import to_string
 
@@ -33,3 +34,18 @@ class Column(object):
         return head
 
     __repr__ = __str__
+
+
+@dataclass
+class Table(ABC):
+    table: str = ""
+
+    all: list[Column] = field(default_factory=list)
+
+    def __post_init__(self):
+        if len(self.table) == 0:
+            raise ValueError("table name must be set")
+        for i in self.__dir__():
+            a = getattr(self, i)
+            if isinstance(a, Column):
+                self.all.append(a)
